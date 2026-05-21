@@ -51,13 +51,28 @@ pnpm run build
 
 The production extension files are generated in `dist/`.
 
+## Download Release
+
+Download the latest `cyber-bookmark-newtab-v*.zip` from GitHub Releases, unzip it, then load the extracted folder in Chrome.
+
 ## Install In Chrome
 
-1. Run `pnpm run build`.
+1. Download and unzip the release package, or run `pnpm run build` locally.
 2. Open Chrome and go to `chrome://extensions/`.
 3. Enable **Developer mode**.
 4. Click **Load unpacked**.
-5. Select the generated `dist/` directory.
+5. Select the unzipped release folder or the generated `dist/` directory.
 6. Open a new tab to use the dashboard.
+
+## Publish A Release
+
+Create and push a version tag to publish a release:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+GitHub Actions will build the extension and upload `cyber-bookmark-newtab-v1.0.0.zip` to the release.
 
 The extension needs the Chrome `bookmarks` permission to read your bookmarks and the `favicon` permission to display site icons. It only reorganizes bookmarks for display; it does not edit your browser bookmarks.

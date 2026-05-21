@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BookMark",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A cyberpunk new tab page that reorganizes Chrome bookmarks by category.",
   "permissions": ["bookmarks", "favicon"],
   "host_permissions": ["http://*/*", "https://*/*"],
