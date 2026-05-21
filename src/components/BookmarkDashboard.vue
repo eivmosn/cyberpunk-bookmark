@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
+import type { BookmarkCategory, BookmarkCategoryNode, BookmarkCategoryViewItem, BookmarkLink } from '../types/bookmark'
 import { gsap } from 'gsap'
 import { BookmarkPlus, ChevronRight, RefreshCw, Search, Zap } from 'lucide-vue-next'
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useBookmarks } from '../composables/useBookmarks'
 import BookmarkCard from './BookmarkCard.vue'
 import CategoryRail from './CategoryRail.vue'
+import LanguageSwitcher from './LanguageSwitcher.vue'
 import Scrollbar from './Scrollbar'
-import { useBookmarks } from '../composables/useBookmarks'
-import type { BookmarkCategory, BookmarkCategoryNode, BookmarkCategoryViewItem, BookmarkLink } from '../types/bookmark'
 
+const { t } = useI18n()
 const { categories, error, isLoading, totalLinks } = useBookmarks()
 
 interface MutableCategoryNode {
@@ -68,10 +71,6 @@ let gridResizeObserver: ResizeObserver | null = null
 let heroResizeObserver: ResizeObserver | null = null
 let tickerResizeObserver: ResizeObserver | null = null
 
-const activeCategory = computed(() => {
-  return findCategoryNode(categoryTree.value, activeCategoryId.value) ?? categoryTree.value[0]
-})
-
 const orderedCategories = computed(() => {
   return [...categories.value].sort((firstCategory, secondCategory) => {
     return firstCategory.name.localeCompare(secondCategory.name, 'zh-Hans-CN')
@@ -84,6 +83,10 @@ const allLinks = computed(() => {
 
 const categoryTree = computed(() => {
   return sortCategoryNodes(buildCategoryTree(orderedCategories.value), categoryOrderIds.value)
+})
+
+const activeCategory = computed(() => {
+  return findCategoryNode(categoryTree.value, activeCategoryId.value) ?? categoryTree.value[0]
 })
 
 const categoryNavigationItems = computed(() => {
@@ -118,7 +121,7 @@ const activeChildCategoryCards = computed(() => {
       path: displayCategoryPath(category.path),
       childCount: category.children.length,
       linkCount: childCategoryLinkCount(category),
-      latestTitle: latestLink?.title ?? '等待访问信号',
+      latestTitle: latestLink?.title ?? t('dashboard.latestSignalPending'),
     }
   })
 })
@@ -209,46 +212,48 @@ const masonryColumns = computed(() => {
 
 const syncStatus = computed(() => {
   if (isLoading.value) {
-    return '同步中'
+    return t('dashboard.syncStatus.loading')
   }
 
   if (error.value) {
-    return '需扩展环境'
+    return t('dashboard.syncStatus.extensionRequired')
   }
 
-  return totalLinks.value > 0 ? '已接入' : '无书签'
+  return totalLinks.value > 0
+    ? t('dashboard.syncStatus.connected')
+    : t('dashboard.syncStatus.empty')
 })
 
 const isBookmarkLibraryEmpty = computed(() => {
   return !isLoading.value && !error.value && totalLinks.value === 0
 })
 
-const heroEmptyText = computed(() => {
-  if (isLoading.value) {
-    return '正在读取浏览器书签...'
-  }
-
-  return isBookmarkLibraryEmpty.value
-    ? '浏览器书签库为空，添加第一个书签后即可生成频道'
-    : tickerEmptyText.value
-})
-
 const tickerEmptyText = computed(() => {
   if (tickerMode.value === 'recent') {
-    return '暂无最近访问，打开一个书签后自动记录'
+    return t('dashboard.ticker.recentEmpty')
   }
 
   if (tickerMode.value === 'frequent') {
-    return '暂无高频访问，多打开几次后自动排序'
+    return t('dashboard.ticker.frequentEmpty')
   }
 
-  return '暂无常用，点击书签卡片星标添加'
+  return t('dashboard.ticker.favoriteEmpty')
+})
+
+const heroEmptyText = computed(() => {
+  if (isLoading.value) {
+    return t('dashboard.hero.loading')
+  }
+
+  return isBookmarkLibraryEmpty.value
+    ? t('dashboard.hero.empty')
+    : tickerEmptyText.value
 })
 
 const searchPlaceholder = computed(() => {
   return searchScope.value === 'category'
-    ? '当前分类内搜索...'
-    : '全局模糊搜索...'
+    ? t('dashboard.search.categoryPlaceholder')
+    : t('dashboard.search.globalPlaceholder')
 })
 
 const currentDateTime = computed(() => {
@@ -683,7 +688,7 @@ function displayCategoryPath(path: readonly string[]) {
 
 function splitCategorySegment(segment: string) {
   return segment
-    .split(/[\/／]+/)
+    .split(/[/／]+/)
     .map(part => part.trim())
     .filter(Boolean)
 }
@@ -882,7 +887,7 @@ function mergeNodeOrderIds(currentOrderIds: readonly string[], previousSiblingId
 }
 
 function categoryNodeId(path: readonly string[]) {
-  return `node:${path.join(' / ').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/gi, '-')}`
+  return `node:${path.join(' / ').toLowerCase().replace(/[^a-z0-9\u4E00-\u9FA5]+/gi, '-')}`
 }
 
 function readFavoriteIds() {
@@ -1030,30 +1035,33 @@ function readTickerMode(): TickerMode {
               <Zap :size="16" />
               {{ currentDateTime }}
             </p>
-            <div v-if="isBookmarkLibraryEmpty" class="hero-empty-badge">
-              EMPTY LIBRARY
+            <div class="hero-actions">
+              <LanguageSwitcher />
             </div>
-            <div v-else class="ticker-tabs" aria-label="顶部滚动来源">
+            <div v-if="isBookmarkLibraryEmpty" class="hero-empty-badge">
+              {{ t('dashboard.hero.emptyBadge') }}
+            </div>
+            <div v-else class="ticker-tabs" :aria-label="t('dashboard.ticker.sourceLabel')">
               <button
                 type="button"
                 :class="{ 'is-active': tickerMode === 'favorite' }"
                 @click="tickerMode = 'favorite'"
               >
-                常用
+                {{ t('dashboard.ticker.favorite') }}
               </button>
               <button
                 type="button"
                 :class="{ 'is-active': tickerMode === 'recent' }"
                 @click="tickerMode = 'recent'"
               >
-                最近
+                {{ t('dashboard.ticker.recent') }}
               </button>
               <button
                 type="button"
                 :class="{ 'is-active': tickerMode === 'frequent' }"
                 @click="tickerMode = 'frequent'"
               >
-                高频
+                {{ t('dashboard.ticker.frequent') }}
               </button>
             </div>
           </div>
@@ -1062,7 +1070,7 @@ function readTickerMode(): TickerMode {
             ref="tickerRef"
             class="site-ticker"
             :class="{ 'is-scrollable': isTickerScrollable }"
-            aria-label="网站滚动列表"
+            :aria-label="t('dashboard.ticker.listLabel')"
           >
             <div
               ref="tickerGroupRef"
@@ -1104,12 +1112,12 @@ function readTickerMode(): TickerMode {
           </div>
 
           <div class="stats">
-            <span>分类 {{ categories.length }}</span>
-            <span>链接 {{ totalLinks }}</span>
-            <span>常用 {{ favoriteLinks.length }}</span>
-            <span>最近 {{ recentLinks.length }}</span>
-            <span>高频 {{ frequentLinks.length }}</span>
-            <span>状态 {{ isBookmarkLibraryEmpty ? '等待添加' : syncStatus }}</span>
+            <span>{{ t('dashboard.stats.categories', { count: categories.length }) }}</span>
+            <span>{{ t('dashboard.stats.links', { count: totalLinks }) }}</span>
+            <span>{{ t('dashboard.stats.favorites', { count: favoriteLinks.length }) }}</span>
+            <span>{{ t('dashboard.stats.recent', { count: recentLinks.length }) }}</span>
+            <span>{{ t('dashboard.stats.frequent', { count: frequentLinks.length }) }}</span>
+            <span>{{ t('dashboard.stats.status', { status: isBookmarkLibraryEmpty ? t('dashboard.syncStatus.waiting') : syncStatus }) }}</span>
           </div>
         </div>
       </section>
@@ -1123,45 +1131,45 @@ function readTickerMode(): TickerMode {
       <section v-if="!isBookmarkLibraryEmpty" class="control-strip hud-panel">
         <label class="search-box">
           <Search :size="18" />
-          <input ref="searchInputRef" v-model="query" :placeholder="searchPlaceholder" />
+          <input ref="searchInputRef" v-model="query" :placeholder="searchPlaceholder">
         </label>
-        <div class="segmented-control" aria-label="搜索范围">
+        <div class="segmented-control" :aria-label="t('dashboard.search.scopeLabel')">
           <button
             type="button"
             :class="{ 'is-active': searchScope === 'global' }"
             @click="searchScope = 'global'"
           >
-            全局
+            {{ t('dashboard.search.global') }}
           </button>
           <button
             type="button"
             :class="{ 'is-active': searchScope === 'category' }"
             @click="searchScope = 'category'"
           >
-            当前分类
+            {{ t('dashboard.search.category') }}
           </button>
         </div>
-        <div class="segmented-control density-control" aria-label="视觉密度">
+        <div class="segmented-control density-control" :aria-label="t('dashboard.density.label')">
           <button
             type="button"
             :class="{ 'is-active': viewDensity === 'compact' }"
             @click="viewDensity = 'compact'"
           >
-            紧凑
+            {{ t('dashboard.density.compact') }}
           </button>
           <button
             type="button"
             :class="{ 'is-active': viewDensity === 'standard' }"
             @click="viewDensity = 'standard'"
           >
-            标准
+            {{ t('dashboard.density.standard') }}
           </button>
           <button
             type="button"
             :class="{ 'is-active': viewDensity === 'showcase' }"
             @click="viewDensity = 'showcase'"
           >
-            展示
+            {{ t('dashboard.density.showcase') }}
           </button>
         </div>
       </section>
@@ -1175,20 +1183,24 @@ function readTickerMode(): TickerMode {
           <BookmarkPlus :size="34" />
         </div>
         <div class="empty-library__copy">
-          <p class="empty-library__eyebrow">BOOKMARK INPUT REQUIRED</p>
-          <h1 id="empty-library-title">还没有可展示的书签</h1>
+          <p class="empty-library__eyebrow">
+            {{ t('dashboard.emptyLibrary.eyebrow') }}
+          </p>
+          <h1 id="empty-library-title">
+            {{ t('dashboard.emptyLibrary.title') }}
+          </h1>
           <p>
-            在浏览器里把常用网页加入书签，刷新后这里会按文件夹自动生成频道、搜索和常用列表。
+            {{ t('dashboard.emptyLibrary.body') }}
           </p>
         </div>
-        <div class="empty-library__steps" aria-label="添加书签流程">
-          <span>打开常用网页</span>
-          <span>点击地址栏星标</span>
-          <span>回到这里刷新</span>
+        <div class="empty-library__steps" :aria-label="t('dashboard.emptyLibrary.stepsLabel')">
+          <span>{{ t('dashboard.emptyLibrary.stepOpen') }}</span>
+          <span>{{ t('dashboard.emptyLibrary.stepStar') }}</span>
+          <span>{{ t('dashboard.emptyLibrary.stepRefresh') }}</span>
         </div>
         <button class="empty-library__action" type="button" @click="reloadDashboard">
           <RefreshCw :size="16" />
-          刷新书签
+          {{ t('dashboard.emptyLibrary.refresh') }}
         </button>
       </section>
 
@@ -1204,8 +1216,8 @@ function readTickerMode(): TickerMode {
 
         <div class="content-pane">
           <section class="channel-hud">
-            <div class="channel-path" aria-label="当前分类路径">
-              <span class="channel-path__label">CHANNEL</span>
+            <div class="channel-path" :aria-label="t('dashboard.channel.pathLabel')">
+              <span class="channel-path__label">{{ t('dashboard.channel.label') }}</span>
               <span
                 v-for="(segment, index) in activeDisplayPath"
                 :key="`${segment}-${index}`"
@@ -1215,7 +1227,7 @@ function readTickerMode(): TickerMode {
                 <span>{{ segment }}</span>
               </span>
             </div>
-            <span class="channel-count">{{ filteredLinks.length }} LINKS</span>
+            <span class="channel-count">{{ t('dashboard.channel.count', { count: filteredLinks.length }) }}</span>
           </section>
 
           <div
@@ -1239,7 +1251,7 @@ function readTickerMode(): TickerMode {
                 <span class="child-category-card__name">{{ childCard.name }}</span>
                 <span class="child-category-card__path">{{ childCard.path }}</span>
                 <span class="child-category-card__meta">
-                  子分类 {{ childCard.childCount }} / 最近 {{ childCard.latestTitle }}
+                  {{ t('dashboard.channel.childMeta', { count: childCard.childCount, title: childCard.latestTitle }) }}
                 </span>
               </button>
             </div>
@@ -1264,8 +1276,8 @@ function readTickerMode(): TickerMode {
             </template>
             <div v-else-if="activeChildCategories.length === 0 || query.trim()" class="empty-state">
               <span class="empty-state__scan" aria-hidden="true" />
-              <strong>{{ query.trim() ? '未捕获匹配信号' : '当前频道为空' }}</strong>
-              <span>{{ query.trim() ? '试试切换搜索范围，或者缩短关键词。' : '选择左侧其他分类，或在浏览器书签里添加新链接。' }}</span>
+              <strong>{{ query.trim() ? t('dashboard.emptyState.searchTitle') : t('dashboard.emptyState.channelTitle') }}</strong>
+              <span>{{ query.trim() ? t('dashboard.emptyState.searchBody') : t('dashboard.emptyState.channelBody') }}</span>
             </div>
           </div>
         </div>

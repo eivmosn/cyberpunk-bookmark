@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
-import { Copy, ExternalLink, MoreHorizontal, PanelTopOpen, Star } from 'lucide-vue-next'
 import type { BookmarkLink } from '../types/bookmark'
+import { Copy, ExternalLink, MoreHorizontal, PanelTopOpen, Star } from 'lucide-vue-next'
+import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   link: BookmarkLink
@@ -15,6 +16,8 @@ const emit = defineEmits<{
   copy: [link: BookmarkLink]
   toggleFavorite: [link: BookmarkLink]
 }>()
+
+const { t } = useI18n()
 
 const failedFaviconIds = shallowRef(new Set<string>())
 const isMenuOpen = shallowRef(false)
@@ -196,14 +199,14 @@ function closeMenuOnEscape(event: KeyboardEvent) {
           :src="faviconSource"
           alt=""
           @error="markFaviconFailed(props.link.id)"
-        />
+        >
       </span>
       <span class="bookmark-card__domain">{{ props.link.domain }}</span>
       <button
         class="bookmark-card__favorite"
         :class="{ 'is-active': props.isFavorite }"
         type="button"
-        :aria-label="props.isFavorite ? '从常用移除' : '添加到常用'"
+        :aria-label="props.isFavorite ? t('card.removeFavorite') : t('card.addFavorite')"
         :aria-pressed="props.isFavorite"
         @click="toggleFavorite"
         @keydown.enter.stop
@@ -224,7 +227,7 @@ function closeMenuOnEscape(event: KeyboardEvent) {
         <button
           class="bookmark-card__more-trigger"
           type="button"
-          aria-label="更多操作"
+          :aria-label="t('card.moreActions')"
           :aria-expanded="isMenuOpen"
           aria-haspopup="menu"
           @click="toggleMenu"
@@ -257,15 +260,15 @@ function closeMenuOnEscape(event: KeyboardEvent) {
       >
         <button type="button" role="menuitem" @click="emitAction($event, 'copy')">
           <Copy :size="14" />
-          复制链接
+          {{ t('card.copy') }}
         </button>
         <button type="button" role="menuitem" @click="emitAction($event, 'openCurrent')">
           <PanelTopOpen :size="14" />
-          当前页打开
+          {{ t('card.openCurrent') }}
         </button>
         <button type="button" role="menuitem" @click="emitAction($event, 'openWindow')">
           <ExternalLink :size="14" />
-          新窗口打开
+          {{ t('card.openWindow') }}
         </button>
       </div>
     </Teleport>

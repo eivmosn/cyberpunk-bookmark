@@ -1,21 +1,31 @@
-import { computed, onMounted, readonly, shallowRef } from 'vue'
 import type { BookmarkCategory, BookmarkLink } from '../types/bookmark'
+import { computed, onMounted, readonly, shallowRef } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const accents = ['#18f0ff', '#ff2fd6', '#f9f871', '#7dff7a', '#ff7a2f', '#a78bfa']
 
 export function useBookmarks() {
+  const { t } = useI18n()
   const categories = shallowRef<BookmarkCategory[]>([])
   const isLoading = shallowRef(true)
-  const error = shallowRef<string | null>(null)
+  const errorKey = shallowRef<'bookmark.unavailableError' | 'bookmark.readError' | null>(null)
+  const caughtError = shallowRef<string | null>(null)
 
   const totalLinks = computed(() => categories.value.reduce((total, category) => total + category.links.length, 0))
+  const error = computed(() => {
+    if (errorKey.value) {
+      return t(errorKey.value)
+    }
+
+    return caughtError.value
+  })
 
   onMounted(async () => {
     try {
       const chromeBookmarks = globalThis.chrome?.bookmarks
 
       if (!chromeBookmarks?.getTree) {
-        error.value = '请在已加载的 Chrome 扩展新标签页中查看，当前环境无法访问 chrome.bookmarks。'
+        errorKey.value = 'bookmark.unavailableError'
         isLoading.value = false
         return
       }
@@ -24,7 +34,8 @@ export function useBookmarks() {
       categories.value = parseBookmarkTree(tree)
     }
     catch (caught) {
-      error.value = caught instanceof Error ? caught.message : '读取 Chrome 书签失败'
+      caughtError.value = caught instanceof Error ? caught.message : null
+      errorKey.value = caughtError.value ? null : 'bookmark.readError'
     }
     finally {
       isLoading.value = false
@@ -33,7 +44,7 @@ export function useBookmarks() {
 
   return {
     categories: readonly(categories),
-    error: readonly(error),
+    error,
     isLoading: readonly(isLoading),
     totalLinks,
   }
@@ -70,7 +81,7 @@ function parseBookmarkTree(nodes: chrome.bookmarks.BookmarkTreeNode[]) {
 
   return [...groups.entries()]
     .map(([key, links], index): BookmarkCategory => ({
-      id: key.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/gi, '-'),
+      id: key.toLowerCase().replace(/[^a-z0-9\u4E00-\u9FA5]+/gi, '-'),
       name: key.split(' / ').at(-1) ?? '未分类',
       path: key.split(' / '),
       links,

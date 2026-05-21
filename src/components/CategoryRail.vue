@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ChevronRight } from 'lucide-vue-next'
 import type { BookmarkCategoryViewItem } from '../types/bookmark'
+import { ChevronRight } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
 
 defineProps<{
   categories: readonly BookmarkCategoryViewItem[]
@@ -12,6 +13,8 @@ const emit = defineEmits<{
   toggle: [categoryId: string]
   move: [categoryId: string, direction: 'up' | 'down']
 }>()
+
+const { t } = useI18n()
 
 function moveCategory(categoryId: string, direction: 'up' | 'down') {
   emit('move', categoryId, direction)
@@ -27,14 +30,14 @@ function displayCategoryPath(path: readonly string[]) {
 
 function splitCategorySegment(segment: string) {
   return segment
-    .split(/[\/／]+/)
+    .split(/[/／]+/)
     .map(part => part.trim())
     .filter(Boolean)
 }
 </script>
 
 <template>
-  <nav class="category-rail" aria-label="书签分类">
+  <nav class="category-rail" :aria-label="t('categoryRail.label')">
     <article
       v-for="category in categories"
       :key="category.id"
@@ -51,7 +54,9 @@ function splitCategorySegment(segment: string) {
         class="category-toggle"
         type="button"
         :style="{ '--depth': category.depth }"
-        :aria-label="category.isExpanded ? `${displayCategoryName(category.name)} 收起` : `${displayCategoryName(category.name)} 展开`"
+        :aria-label="category.isExpanded
+          ? t('categoryRail.collapse', { name: displayCategoryName(category.name) })
+          : t('categoryRail.expand', { name: displayCategoryName(category.name) })"
         :aria-expanded="category.isExpanded"
         @click="emit('toggle', category.id)"
       >
@@ -75,12 +80,12 @@ function splitCategorySegment(segment: string) {
       <span
         v-if="category.siblingCount > 1"
         class="category-sort-actions"
-        aria-label="分类排序"
+        :aria-label="t('categoryRail.sortLabel')"
       >
         <button
           class="category-sort-action category-sort-action--up"
           type="button"
-          :aria-label="`${displayCategoryName(category.name)} 前移`"
+          :aria-label="t('categoryRail.moveUp', { name: displayCategoryName(category.name) })"
           :disabled="category.siblingIndex === 0"
           @click="moveCategory(category.id, 'up')"
         >
@@ -93,7 +98,7 @@ function splitCategorySegment(segment: string) {
         <button
           class="category-sort-action category-sort-action--down"
           type="button"
-          :aria-label="`${displayCategoryName(category.name)} 后移`"
+          :aria-label="t('categoryRail.moveDown', { name: displayCategoryName(category.name) })"
           :disabled="category.siblingIndex === category.siblingCount - 1"
           @click="moveCategory(category.id, 'down')"
         >
