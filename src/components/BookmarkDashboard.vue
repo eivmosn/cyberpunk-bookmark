@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { gsap } from 'gsap'
-import { ChevronRight, Search, Zap } from 'lucide-vue-next'
+import { BookmarkPlus, ChevronRight, RefreshCw, Search, Zap } from 'lucide-vue-next'
 import BookmarkCard from './BookmarkCard.vue'
 import CategoryRail from './CategoryRail.vue'
 import Scrollbar from './Scrollbar'
@@ -219,6 +219,20 @@ const syncStatus = computed(() => {
   return totalLinks.value > 0 ? '已接入' : '无书签'
 })
 
+const isBookmarkLibraryEmpty = computed(() => {
+  return !isLoading.value && !error.value && totalLinks.value === 0
+})
+
+const heroEmptyText = computed(() => {
+  if (isLoading.value) {
+    return '正在读取浏览器书签...'
+  }
+
+  return isBookmarkLibraryEmpty.value
+    ? '浏览器书签库为空，添加第一个书签后即可生成频道'
+    : tickerEmptyText.value
+})
+
 const tickerEmptyText = computed(() => {
   if (tickerMode.value === 'recent') {
     return '暂无最近访问，打开一个书签后自动记录'
@@ -426,6 +440,10 @@ function selectCategory(category: BookmarkCategoryNode) {
 function focusSearch() {
   searchInputRef.value?.focus()
   searchInputRef.value?.select()
+}
+
+function reloadDashboard() {
+  window.location.reload()
 }
 
 function toggleCategory(categoryId: string) {
@@ -1012,7 +1030,10 @@ function readTickerMode(): TickerMode {
               <Zap :size="16" />
               {{ currentDateTime }}
             </p>
-            <div class="ticker-tabs" aria-label="顶部滚动来源">
+            <div v-if="isBookmarkLibraryEmpty" class="hero-empty-badge">
+              EMPTY LIBRARY
+            </div>
+            <div v-else class="ticker-tabs" aria-label="顶部滚动来源">
               <button
                 type="button"
                 :class="{ 'is-active': tickerMode === 'favorite' }"
@@ -1078,7 +1099,7 @@ function readTickerMode(): TickerMode {
               </button>
             </div>
             <span v-if="tickerLinks.length === 0" class="site-ticker__empty">
-              {{ tickerEmptyText }}
+              {{ heroEmptyText }}
             </span>
           </div>
 
@@ -1088,7 +1109,7 @@ function readTickerMode(): TickerMode {
             <span>常用 {{ favoriteLinks.length }}</span>
             <span>最近 {{ recentLinks.length }}</span>
             <span>高频 {{ frequentLinks.length }}</span>
-            <span>状态 {{ syncStatus }}</span>
+            <span>状态 {{ isBookmarkLibraryEmpty ? '等待添加' : syncStatus }}</span>
           </div>
         </div>
       </section>
@@ -1099,7 +1120,7 @@ function readTickerMode(): TickerMode {
         aria-hidden="true"
       />
 
-      <section class="control-strip hud-panel">
+      <section v-if="!isBookmarkLibraryEmpty" class="control-strip hud-panel">
         <label class="search-box">
           <Search :size="18" />
           <input ref="searchInputRef" v-model="query" :placeholder="searchPlaceholder" />
@@ -1149,7 +1170,29 @@ function readTickerMode(): TickerMode {
         {{ error }}
       </section>
 
-      <section class="workspace">
+      <section v-if="isBookmarkLibraryEmpty" class="empty-library hud-panel" aria-labelledby="empty-library-title">
+        <div class="empty-library__mark" aria-hidden="true">
+          <BookmarkPlus :size="34" />
+        </div>
+        <div class="empty-library__copy">
+          <p class="empty-library__eyebrow">BOOKMARK INPUT REQUIRED</p>
+          <h1 id="empty-library-title">还没有可展示的书签</h1>
+          <p>
+            在浏览器里把常用网页加入书签，刷新后这里会按文件夹自动生成频道、搜索和常用列表。
+          </p>
+        </div>
+        <div class="empty-library__steps" aria-label="添加书签流程">
+          <span>打开常用网页</span>
+          <span>点击地址栏星标</span>
+          <span>回到这里刷新</span>
+        </div>
+        <button class="empty-library__action" type="button" @click="reloadDashboard">
+          <RefreshCw :size="16" />
+          刷新书签
+        </button>
+      </section>
+
+      <section v-else class="workspace">
         <CategoryRail
           v-if="categoryNavigationItems.length"
           :categories="categoryNavigationItems"
