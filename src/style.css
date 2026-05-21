@@ -438,7 +438,8 @@ button {
 
 .site-ticker__item {
   --accent: var(--cyan);
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
   align-items: center;
   gap: 9px;
   min-width: 168px;
@@ -466,9 +467,11 @@ button {
 }
 
 .site-ticker__domain {
-  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
   color: var(--accent);
   font-weight: 800;
+  text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
 }
