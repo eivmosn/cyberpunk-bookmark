@@ -49,16 +49,23 @@ const viewDensity = shallowRef<ViewDensity>('standard')
 const tickerMode = shallowRef<TickerMode>('favorite')
 const dashboardRef = useTemplateRef<HTMLElement>('dashboardRef')
 const cursorRef = useTemplateRef<HTMLElement>('cursorRef')
+const heroRef = useTemplateRef<HTMLElement>('heroRef')
+const bookmarkGridRef = useTemplateRef<HTMLElement>('bookmarkGridRef')
 const searchInputRef = useTemplateRef<HTMLInputElement>('searchInputRef')
 const tickerRef = useTemplateRef<HTMLElement>('tickerRef')
 const tickerGroupRef = useTemplateRef<HTMLElement>('tickerGroupRef')
+const bookmarkGridWidth = shallowRef(0)
 const isTickerScrollable = shallowRef(false)
 const isHeroDocked = shallowRef(false)
+const heroHeight = shallowRef(0)
 let animationContext: gsap.Context | null = null
 let removePointerListener: (() => void) | null = null
 let removeKeyboardListener: (() => void) | null = null
 let clockTimer: number | null = null
+let gridResizeFrame = 0
 let tickerResizeFrame = 0
+let gridResizeObserver: ResizeObserver | null = null
+let heroResizeObserver: ResizeObserver | null = null
 let tickerResizeObserver: ResizeObserver | null = null
 
 const activeCategory = computed(() => {
@@ -161,6 +168,45 @@ const filteredLinks = computed(() => {
   })
 })
 
+const masonryConfig = computed(() => {
+  if (viewDensity.value === 'compact') {
+    return { minColumnWidth: 218, gap: 9 }
+  }
+
+  if (viewDensity.value === 'showcase') {
+    return { minColumnWidth: 340, gap: 16 }
+  }
+
+  return { minColumnWidth: 286, gap: 12 }
+})
+
+const masonryColumnCount = computed(() => {
+  if (filteredLinks.value.length === 0) {
+    return 1
+  }
+
+  const { minColumnWidth, gap } = masonryConfig.value
+  const availableWidth = bookmarkGridWidth.value
+
+  if (availableWidth <= 0) {
+    return 1
+  }
+
+  const columnCount = Math.floor((availableWidth + gap) / (minColumnWidth + gap))
+
+  return Math.max(1, Math.min(filteredLinks.value.length, columnCount))
+})
+
+const masonryColumns = computed(() => {
+  const columns: BookmarkLink[][] = Array.from({ length: masonryColumnCount.value }, () => [])
+
+  filteredLinks.value.forEach((link, index) => {
+    columns[index % masonryColumnCount.value].push(link)
+  })
+
+  return columns
+})
+
 const syncStatus = computed(() => {
   if (isLoading.value) {
     return '同步中'
@@ -261,6 +307,24 @@ onMounted(() => {
     tickerResizeObserver.observe(tickerRef.value)
   }
 
+  if (bookmarkGridRef.value) {
+    scheduleBookmarkGridResize(bookmarkGridRef.value.getBoundingClientRect().width)
+    gridResizeObserver = new ResizeObserver(([entry]) => {
+      scheduleBookmarkGridResize(entry.contentRect.width)
+    })
+
+    gridResizeObserver.observe(bookmarkGridRef.value)
+  }
+
+  if (heroRef.value) {
+    heroHeight.value = heroRef.value.offsetHeight
+    heroResizeObserver = new ResizeObserver(([entry]) => {
+      heroHeight.value = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+    })
+
+    heroResizeObserver.observe(heroRef.value)
+  }
+
   animationContext = gsap.context(() => {
     gsap.timeline({ defaults: { duration: 0.72, ease: 'power3.out' } })
       .from('.hero-kicker', { autoAlpha: 0, y: 18 })
@@ -343,7 +407,10 @@ onUnmounted(() => {
 
   removePointerListener?.()
   removeKeyboardListener?.()
+  cancelAnimationFrame(gridResizeFrame)
   cancelAnimationFrame(tickerResizeFrame)
+  gridResizeObserver?.disconnect()
+  heroResizeObserver?.disconnect()
   tickerResizeObserver?.disconnect()
   animationContext?.revert()
 })
@@ -484,6 +551,15 @@ function measureTickerOverflow() {
   if (isTickerScrollable.value !== nextIsScrollable) {
     isTickerScrollable.value = nextIsScrollable
   }
+}
+
+function scheduleBookmarkGridResize(width: number) {
+  cancelAnimationFrame(gridResizeFrame)
+  gridResizeFrame = requestAnimationFrame(() => {
+    if (Math.abs(bookmarkGridWidth.value - width) > 0.5) {
+      bookmarkGridWidth.value = width
+    }
+  })
 }
 
 function scheduleTickerOverflowMeasure() {
@@ -926,6 +1002,7 @@ function readTickerMode(): TickerMode {
       <div class="scanline" />
 
       <section
+        ref="heroRef"
         class="hero hud-panel"
         :class="{ 'is-docked': isHeroDocked }"
       >
@@ -1015,6 +1092,12 @@ function readTickerMode(): TickerMode {
           </div>
         </div>
       </section>
+      <div
+        v-if="isHeroDocked"
+        class="hero-spacer"
+        :style="{ height: `${heroHeight}px` }"
+        aria-hidden="true"
+      />
 
       <section class="control-strip hud-panel">
         <label class="search-box">
@@ -1093,7 +1176,9 @@ function readTickerMode(): TickerMode {
           </section>
 
           <div
+            ref="bookmarkGridRef"
             class="bookmark-grid"
+            :style="{ '--masonry-columns': masonryColumnCount, '--masonry-gap': `${masonryConfig.gap}px` }"
           >
             <div
               v-if="!query.trim() && filteredLinks.length === 0 && activeChildCategoryCards.length > 0"
@@ -1116,17 +1201,23 @@ function readTickerMode(): TickerMode {
               </button>
             </div>
             <template v-if="filteredLinks.length > 0">
-              <BookmarkCard
-                v-for="link in filteredLinks"
-                :key="link.id"
-                :link="link"
-                :is-favorite="isFavorite(link)"
-                @open="openLink"
-                @open-current="openLinkInCurrentTab"
-                @open-window="openLinkInWindow"
-                @copy="copyLink"
-                @toggle-favorite="toggleFavorite"
-              />
+              <div
+                v-for="(column, columnIndex) in masonryColumns"
+                :key="columnIndex"
+                class="bookmark-column"
+              >
+                <BookmarkCard
+                  v-for="link in column"
+                  :key="link.id"
+                  :link="link"
+                  :is-favorite="isFavorite(link)"
+                  @open="openLink"
+                  @open-current="openLinkInCurrentTab"
+                  @open-window="openLinkInWindow"
+                  @copy="copyLink"
+                  @toggle-favorite="toggleFavorite"
+                />
+              </div>
             </template>
             <div v-else-if="activeChildCategories.length === 0 || query.trim()" class="empty-state">
               <span class="empty-state__scan" aria-hidden="true" />
