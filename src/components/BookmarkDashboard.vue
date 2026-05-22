@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import type { BookmarkCategory, BookmarkCategoryNode, BookmarkCategoryViewItem, BookmarkLink } from '../types/bookmark'
 import { gsap } from 'gsap'
-import { BookmarkPlus, ChevronRight, RefreshCw, Search, Zap } from 'lucide-vue-next'
+import { BookmarkPlus, ChevronRight, LayoutGrid, LayoutList, PanelsTopLeft, RefreshCw, Search, Zap } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useBookmarkNotes } from '../composables/useBookmarkNotes'
 import { useBookmarks } from '../composables/useBookmarks'
 import BookmarkCard from './BookmarkCard.vue'
+import BookmarkConfigTransfer from './BookmarkConfigTransfer.vue'
 import CategoryRail from './CategoryRail.vue'
 import LanguageSwitcher from './LanguageSwitcher.vue'
 import Scrollbar from './Scrollbar'
+import SearchScopeDropdown from './SearchScopeDropdown.vue'
 
 const { t } = useI18n()
 const { categories, error, isLoading, totalLinks } = useBookmarks()
+const { exportBookmarkNotes, importBookmarkNotes, noteForLink, setBookmarkNote } = useBookmarkNotes()
 
 interface MutableCategoryNode {
   id: string
@@ -43,6 +47,7 @@ interface LinkMetric {
 const activeCategoryId = shallowRef('')
 const query = shallowRef('')
 const now = shallowRef(new Date())
+const transferMessage = shallowRef('')
 const favoriteIds = shallowRef(new Set<string>())
 const categoryOrderIds = shallowRef<string[]>([])
 const expandedCategoryIds = shallowRef(new Set<string>())
@@ -52,23 +57,20 @@ const viewDensity = shallowRef<ViewDensity>('standard')
 const tickerMode = shallowRef<TickerMode>('favorite')
 const dashboardRef = useTemplateRef<HTMLElement>('dashboardRef')
 const cursorRef = useTemplateRef<HTMLElement>('cursorRef')
-const heroRef = useTemplateRef<HTMLElement>('heroRef')
 const bookmarkGridRef = useTemplateRef<HTMLElement>('bookmarkGridRef')
 const searchInputRef = useTemplateRef<HTMLInputElement>('searchInputRef')
 const tickerRef = useTemplateRef<HTMLElement>('tickerRef')
 const tickerGroupRef = useTemplateRef<HTMLElement>('tickerGroupRef')
 const bookmarkGridWidth = shallowRef(0)
 const isTickerScrollable = shallowRef(false)
-const isHeroDocked = shallowRef(false)
-const heroHeight = shallowRef(0)
 let animationContext: gsap.Context | null = null
 let removePointerListener: (() => void) | null = null
 let removeKeyboardListener: (() => void) | null = null
 let clockTimer: number | null = null
 let gridResizeFrame = 0
 let tickerResizeFrame = 0
+let transferMessageTimer = 0
 let gridResizeObserver: ResizeObserver | null = null
-let heroResizeObserver: ResizeObserver | null = null
 let tickerResizeObserver: ResizeObserver | null = null
 
 const orderedCategories = computed(() => {
@@ -228,6 +230,10 @@ const isBookmarkLibraryEmpty = computed(() => {
   return !isLoading.value && !error.value && totalLinks.value === 0
 })
 
+const shouldShowBookmarkWorkspace = computed(() => {
+  return !isLoading.value && !error.value && totalLinks.value > 0
+})
+
 const tickerEmptyText = computed(() => {
   if (tickerMode.value === 'recent') {
     return t('dashboard.ticker.recentEmpty')
@@ -326,23 +332,7 @@ onMounted(() => {
     tickerResizeObserver.observe(tickerRef.value)
   }
 
-  if (bookmarkGridRef.value) {
-    scheduleBookmarkGridResize(bookmarkGridRef.value.getBoundingClientRect().width)
-    gridResizeObserver = new ResizeObserver(([entry]) => {
-      scheduleBookmarkGridResize(entry.contentRect.width)
-    })
-
-    gridResizeObserver.observe(bookmarkGridRef.value)
-  }
-
-  if (heroRef.value) {
-    heroHeight.value = heroRef.value.offsetHeight
-    heroResizeObserver = new ResizeObserver(([entry]) => {
-      heroHeight.value = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
-    })
-
-    heroResizeObserver.observe(heroRef.value)
-  }
+  bindBookmarkGridResizeObserver()
 
   animationContext = gsap.context(() => {
     gsap.timeline({ defaults: { duration: 0.72, ease: 'power3.out' } })
@@ -401,7 +391,20 @@ watch(tickerLinks, async () => {
 
 watch(filteredLinks, async () => {
   await nextTick()
+  bindBookmarkGridResizeObserver()
   animateBookmarkCards()
+}, { flush: 'post' })
+
+watch(shouldShowBookmarkWorkspace, async (shouldShow) => {
+  if (!shouldShow) {
+    gridResizeObserver?.disconnect()
+    gridResizeObserver = null
+    bookmarkGridWidth.value = 0
+    return
+  }
+
+  await nextTick()
+  bindBookmarkGridResizeObserver()
 }, { flush: 'post' })
 
 watch(filteredLinks, (links) => {
@@ -428,8 +431,8 @@ onUnmounted(() => {
   removeKeyboardListener?.()
   cancelAnimationFrame(gridResizeFrame)
   cancelAnimationFrame(tickerResizeFrame)
+  window.clearTimeout(transferMessageTimer)
   gridResizeObserver?.disconnect()
-  heroResizeObserver?.disconnect()
   tickerResizeObserver?.disconnect()
   animationContext?.revert()
 })
@@ -525,6 +528,50 @@ async function copyLink(link: BookmarkLink) {
   }
 }
 
+/**
+ * Downloads a JSON backup containing all saved private bookmark notes.
+ */
+function exportNotesBackup() {
+  const backupContent = exportBookmarkNotes()
+  const backupFile = new Blob([backupContent], { type: 'application/json;charset=utf-8' })
+  const downloadUrl = URL.createObjectURL(backupFile)
+  const anchor = document.createElement('a')
+
+  anchor.href = downloadUrl
+  anchor.download = `cyber-bookmark-notes-${new Date().toISOString().slice(0, 10)}.json`
+  anchor.click()
+  URL.revokeObjectURL(downloadUrl)
+  showTransferMessage(t('dashboard.config.exported'))
+}
+
+/**
+ * Restores private bookmark notes from a selected JSON backup file.
+ *
+ * @param content - Raw JSON backup content emitted by the import control.
+ */
+function importNotesBackup(content: string) {
+  try {
+    const importedCount = importBookmarkNotes(content)
+    showTransferMessage(t('dashboard.config.imported', { count: importedCount }))
+  }
+  catch {
+    showTransferMessage(t('dashboard.config.importFailed'))
+  }
+}
+
+/**
+ * Shows a short global feedback message for backup import and export actions.
+ *
+ * @param message - Localized message text shown in the global toast.
+ */
+function showTransferMessage(message: string) {
+  window.clearTimeout(transferMessageTimer)
+  transferMessage.value = message
+  transferMessageTimer = window.setTimeout(() => {
+    transferMessage.value = ''
+  }, 2400)
+}
+
 function recordLinkOpen(link: BookmarkLink) {
   const currentMetric = linkMetrics.value[link.id] ?? { count: 0, lastOpenedAt: 0 }
 
@@ -554,10 +601,6 @@ function isFavorite(link: BookmarkLink) {
   return favoriteIds.value.has(link.id)
 }
 
-function handleDashboardScroll(payload: { scrollTop: number }) {
-  isHeroDocked.value = payload.scrollTop > 18
-}
-
 function measureTickerOverflow() {
   const ticker = tickerRef.value
   const tickerGroup = tickerGroupRef.value
@@ -574,6 +617,29 @@ function measureTickerOverflow() {
   if (isTickerScrollable.value !== nextIsScrollable) {
     isTickerScrollable.value = nextIsScrollable
   }
+}
+
+/**
+ * Binds grid width observation after the workspace grid has actually rendered.
+ */
+function bindBookmarkGridResizeObserver() {
+  const grid = bookmarkGridRef.value
+
+  if (!grid) {
+    return
+  }
+
+  scheduleBookmarkGridResize(grid.getBoundingClientRect().width)
+
+  if (gridResizeObserver) {
+    return
+  }
+
+  gridResizeObserver = new ResizeObserver(([entry]) => {
+    scheduleBookmarkGridResize(entry.contentRect.width)
+  })
+
+  gridResizeObserver.observe(grid)
 }
 
 function scheduleBookmarkGridResize(width: number) {
@@ -1013,7 +1079,6 @@ function readTickerMode(): TickerMode {
     class="app-scrollbar"
     view-class="app-scrollbar__view"
     :min-size="46"
-    @scroll="handleDashboardScroll"
   >
     <main
       ref="dashboardRef"
@@ -1024,11 +1089,7 @@ function readTickerMode(): TickerMode {
       <div class="grid-backdrop" />
       <div class="scanline" />
 
-      <section
-        ref="heroRef"
-        class="hero hud-panel"
-        :class="{ 'is-docked': isHeroDocked }"
-      >
+      <section class="hero hud-panel">
         <div class="ticker-shell">
           <div class="hero-meta">
             <p class="hero-kicker">
@@ -1121,56 +1182,59 @@ function readTickerMode(): TickerMode {
           </div>
         </div>
       </section>
-      <div
-        v-if="isHeroDocked"
-        class="hero-spacer"
-        :style="{ height: `${heroHeight}px` }"
-        aria-hidden="true"
-      />
-
-      <section v-if="!isBookmarkLibraryEmpty" class="control-strip hud-panel">
-        <label class="search-box">
-          <Search :size="18" />
-          <input ref="searchInputRef" v-model="query" :placeholder="searchPlaceholder">
-        </label>
-        <div class="segmented-control" :aria-label="t('dashboard.search.scopeLabel')">
-          <button
-            type="button"
-            :class="{ 'is-active': searchScope === 'global' }"
-            @click="searchScope = 'global'"
-          >
-            {{ t('dashboard.search.global') }}
-          </button>
-          <button
-            type="button"
-            :class="{ 'is-active': searchScope === 'category' }"
-            @click="searchScope = 'category'"
-          >
-            {{ t('dashboard.search.category') }}
-          </button>
-        </div>
-        <div class="segmented-control density-control" :aria-label="t('dashboard.density.label')">
-          <button
-            type="button"
-            :class="{ 'is-active': viewDensity === 'compact' }"
-            @click="viewDensity = 'compact'"
-          >
-            {{ t('dashboard.density.compact') }}
-          </button>
-          <button
-            type="button"
-            :class="{ 'is-active': viewDensity === 'standard' }"
-            @click="viewDensity = 'standard'"
-          >
-            {{ t('dashboard.density.standard') }}
-          </button>
-          <button
-            type="button"
-            :class="{ 'is-active': viewDensity === 'showcase' }"
-            @click="viewDensity = 'showcase'"
-          >
-            {{ t('dashboard.density.showcase') }}
-          </button>
+      <section v-if="shouldShowBookmarkWorkspace" class="control-strip hud-panel">
+        <div class="control-strip__actions">
+          <div class="search-box">
+            <Search :size="18" />
+            <input
+              ref="searchInputRef"
+              v-model="query"
+              :aria-label="searchPlaceholder"
+              :placeholder="searchPlaceholder"
+            >
+            <SearchScopeDropdown
+              v-model="searchScope"
+              :category-label="t('dashboard.search.category')"
+              :global-label="t('dashboard.search.global')"
+              :label="t('dashboard.search.scopeLabel')"
+            />
+          </div>
+          <div class="segmented-control density-control" :aria-label="t('dashboard.density.label')">
+            <button
+              type="button"
+              :class="{ 'is-active': viewDensity === 'compact' }"
+              :aria-label="t('dashboard.density.compact')"
+              :data-tooltip="t('dashboard.density.compact')"
+              @click="viewDensity = 'compact'"
+            >
+              <LayoutList :size="16" />
+            </button>
+            <button
+              type="button"
+              :class="{ 'is-active': viewDensity === 'standard' }"
+              :aria-label="t('dashboard.density.standard')"
+              :data-tooltip="t('dashboard.density.standard')"
+              @click="viewDensity = 'standard'"
+            >
+              <LayoutGrid :size="16" />
+            </button>
+            <button
+              type="button"
+              :class="{ 'is-active': viewDensity === 'showcase' }"
+              :aria-label="t('dashboard.density.showcase')"
+              :data-tooltip="t('dashboard.density.showcase')"
+              @click="viewDensity = 'showcase'"
+            >
+              <PanelsTopLeft :size="16" />
+            </button>
+          </div>
+          <BookmarkConfigTransfer
+            :export-label="t('dashboard.config.export')"
+            :import-label="t('dashboard.config.import')"
+            :warning="t('dashboard.config.warning')"
+            @export="exportNotesBackup"
+            @import="importNotesBackup"
+          />
         </div>
       </section>
 
@@ -1178,7 +1242,7 @@ function readTickerMode(): TickerMode {
         {{ error }}
       </section>
 
-      <section v-if="isBookmarkLibraryEmpty" class="empty-library hud-panel" aria-labelledby="empty-library-title">
+      <section v-else-if="isBookmarkLibraryEmpty" class="empty-library hud-panel" aria-labelledby="empty-library-title">
         <div class="empty-library__mark" aria-hidden="true">
           <BookmarkPlus :size="34" />
         </div>
@@ -1204,7 +1268,7 @@ function readTickerMode(): TickerMode {
         </button>
       </section>
 
-      <section v-else class="workspace">
+      <section v-else-if="shouldShowBookmarkWorkspace" class="workspace">
         <CategoryRail
           v-if="categoryNavigationItems.length"
           :categories="categoryNavigationItems"
@@ -1266,11 +1330,13 @@ function readTickerMode(): TickerMode {
                   :key="link.id"
                   :link="link"
                   :is-favorite="isFavorite(link)"
+                  :note="noteForLink(link.id)"
                   @open="openLink"
                   @open-current="openLinkInCurrentTab"
                   @open-window="openLinkInWindow"
                   @copy="copyLink"
                   @toggle-favorite="toggleFavorite"
+                  @update-note="setBookmarkNote(link.id, $event)"
                 />
               </div>
             </template>
@@ -1282,6 +1348,14 @@ function readTickerMode(): TickerMode {
           </div>
         </div>
       </section>
+
+      <Teleport to="body">
+        <Transition name="global-message">
+          <div v-if="transferMessage" class="global-message" role="status">
+            {{ transferMessage }}
+          </div>
+        </Transition>
+      </Teleport>
     </main>
   </Scrollbar>
 </template>
