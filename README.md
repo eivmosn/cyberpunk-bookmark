@@ -19,6 +19,12 @@ A cyberpunk-style Chrome new tab extension that turns browser bookmarks into a s
 
 ## Development
 
+Use the project Node.js version before installing dependencies:
+
+```bash
+fnm use
+```
+
 Install dependencies:
 
 ```bash
@@ -53,7 +59,7 @@ The production extension files are generated in `dist/`.
 
 ## Download Release
 
-Download the latest `cyber-bookmark-newtab-v*.zip` from GitHub Releases, unzip it, then load the extracted folder in Chrome.
+Download the latest `cyber-bookmark-*.zip` from GitHub Releases, unzip it, then load the extracted folder in Chrome.
 
 ## Install In Chrome
 
@@ -66,13 +72,19 @@ Download the latest `cyber-bookmark-newtab-v*.zip` from GitHub Releases, unzip i
 
 ## Publish A Release
 
-Create and push a version tag to publish a release:
+Generate the changelog with the Angular conventional changelog preset:
+
+```bash
+pnpm run changelog
+```
+
+Commit the changelog and version changes, then create and push a version tag to publish a release:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-GitHub Actions will build the extension and upload `cyber-bookmark-newtab-v1.0.0.zip` to the release.
+GitHub Actions will build the extension and upload `cyber-bookmark-1.0.0.zip` to the release.
 
 The extension needs the Chrome `bookmarks` permission to read your bookmarks and the `favicon` permission to display site icons. It only reorganizes bookmarks for display; it does not edit your browser bookmarks.

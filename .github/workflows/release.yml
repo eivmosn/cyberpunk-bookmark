@@ -25,7 +25,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: pnpm
 
       - name: Install dependencies
@@ -36,14 +36,16 @@ jobs:
 
       - name: Package extension
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           cd dist
-          zip -r ../cyber-bookmark-newtab-${GITHUB_REF_NAME}.zip .
+          zip -r "../cyber-bookmark-${VERSION}.zip" .
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
           gh release create "$GITHUB_REF_NAME" \
-            "cyber-bookmark-newtab-${GITHUB_REF_NAME}.zip" \
-            --title "Cyber Bookmark ${GITHUB_REF_NAME}" \
-            --notes "Download the zip, unzip it, then load the extracted folder in Chrome extensions with Developer mode enabled."
+            "cyber-bookmark-${VERSION}.zip" \
+            --title "$GITHUB_REF_NAME" \
+            --notes "Please refer to [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/CHANGELOG.md) for details."
