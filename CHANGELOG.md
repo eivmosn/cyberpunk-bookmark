@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/eivmosn/cyberpunk-bookmark/compare/v1.0.1...v1.0.2) (2026-05-22)
+
+
+### Bug Fixes
+
+* **build:** constrain project runtime for Vite 8 ([be1ae63](https://github.com/eivmosn/cyberpunk-bookmark/commit/be1ae6371ac7f5a9ee084e8aa9f17a24e6a5427b))
 
 ## [1.0.1](https://github.com/eivmosn/cyberpunk-bookmark/compare/v1.0.0...v1.0.1) (2026-05-22)
 
