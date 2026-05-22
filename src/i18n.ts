@@ -64,6 +64,14 @@ const messages = {
         standard: '标准',
         showcase: '展示',
       },
+      config: {
+        export: '导出记录',
+        import: '导入记录',
+        exported: '记录备份已导出',
+        imported: '已恢复 {count} 条记录',
+        importFailed: '导入失败，请选择有效的 JSON 备份',
+        warning: '导出的账号密码备注是明文 JSON，请妥善保管。',
+      },
       emptyLibrary: {
         eyebrow: '书签输入待接入',
         title: '还没有可展示的书签',
@@ -102,6 +110,10 @@ const messages = {
       copy: '复制链接',
       openCurrent: '当前页打开',
       openWindow: '新窗口打开',
+      expandDetail: '展开账号密码或备注',
+      collapseDetail: '收起账号密码或备注',
+      noteTitle: '账号 / 密码 / 备注',
+      notePlaceholder: '输入该网站的账号、密码提示或备注...',
     },
   },
   'en': {
@@ -158,6 +170,14 @@ const messages = {
         standard: 'Standard',
         showcase: 'Showcase',
       },
+      config: {
+        export: 'Export notes',
+        import: 'Import notes',
+        exported: 'Notes backup exported',
+        imported: 'Restored {count} notes',
+        importFailed: 'Import failed. Choose a valid JSON backup.',
+        warning: 'Exported account, password, and note data is plain JSON. Keep it private.',
+      },
       emptyLibrary: {
         eyebrow: 'BOOKMARK INPUT REQUIRED',
         title: 'No bookmarks to display yet',
@@ -196,6 +216,10 @@ const messages = {
       copy: 'Copy link',
       openCurrent: 'Open in current tab',
       openWindow: 'Open in new window',
+      expandDetail: 'Expand account, password, or note',
+      collapseDetail: 'Collapse account, password, or note',
+      noteTitle: 'Account / password / note',
+      notePlaceholder: 'Enter account, password hint, or site note...',
     },
   },
 } as const

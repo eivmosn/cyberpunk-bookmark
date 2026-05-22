@@ -3,10 +3,12 @@ import type { BookmarkLink } from '../types/bookmark'
 import { Copy, ExternalLink, MoreHorizontal, PanelTopOpen, Star } from 'lucide-vue-next'
 import { computed, nextTick, onMounted, onUnmounted, shallowRef, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import BookmarkCardPrivateNote from './BookmarkCardPrivateNote.vue'
 
 const props = defineProps<{
   link: BookmarkLink
   isFavorite: boolean
+  note: string
 }>()
 
 const emit = defineEmits<{
@@ -15,6 +17,7 @@ const emit = defineEmits<{
   openWindow: [link: BookmarkLink]
   copy: [link: BookmarkLink]
   toggleFavorite: [link: BookmarkLink]
+  updateNote: [value: string]
 }>()
 
 const { t } = useI18n()
@@ -32,8 +35,6 @@ const menuStyle = computed(() => ({
   minWidth: `${menuPosition.value.minWidth}px`,
 }))
 
-let closeTimer = 0
-
 onMounted(() => {
   document.addEventListener('pointerdown', closeMenuOnOutsidePointer, true)
   document.addEventListener('keydown', closeMenuOnEscape)
@@ -42,7 +43,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  clearCloseTimer()
   document.removeEventListener('pointerdown', closeMenuOnOutsidePointer, true)
   document.removeEventListener('keydown', closeMenuOnEscape)
   window.removeEventListener('resize', closeMenu)
@@ -106,7 +106,6 @@ function toggleMenu(event: MouseEvent | KeyboardEvent) {
 }
 
 async function openMenu() {
-  clearCloseTimer()
   updateMenuPosition()
   isMenuOpen.value = true
   await nextTick()
@@ -114,24 +113,7 @@ async function openMenu() {
 }
 
 function closeMenu() {
-  clearCloseTimer()
   isMenuOpen.value = false
-}
-
-function closeMenuSoon() {
-  clearCloseTimer()
-  closeTimer = window.setTimeout(() => {
-    isMenuOpen.value = false
-  }, 120)
-}
-
-function clearCloseTimer() {
-  if (!closeTimer) {
-    return
-  }
-
-  window.clearTimeout(closeTimer)
-  closeTimer = 0
 }
 
 function updateMenuPosition() {
@@ -214,13 +196,20 @@ function closeMenuOnEscape(event: KeyboardEvent) {
       >
         <Star :size="16" :fill="props.isFavorite ? 'currentColor' : 'none'" />
       </button>
+      <BookmarkCardPrivateNote
+        :model-value="props.note"
+        :accent="props.link.accent"
+        :collapse-label="t('card.collapseDetail')"
+        :expand-label="t('card.expandDetail')"
+        :placeholder="t('card.notePlaceholder')"
+        :title="t('card.noteTitle')"
+        @update:model-value="emit('updateNote', $event)"
+      />
       <div
         ref="moreRef"
         class="bookmark-card__more"
         :class="{ 'is-menu-open': isMenuOpen }"
         @click.stop
-        @pointerenter="openMenu"
-        @pointerleave="closeMenuSoon"
         @keydown.enter.stop
         @keydown.space.stop
       >
@@ -255,8 +244,6 @@ function closeMenuOnEscape(event: KeyboardEvent) {
         :style="menuStyle"
         role="menu"
         @click.stop
-        @pointerenter="openMenu"
-        @pointerleave="closeMenuSoon"
       >
         <button type="button" role="menuitem" @click="emitAction($event, 'copy')">
           <Copy :size="14" />
